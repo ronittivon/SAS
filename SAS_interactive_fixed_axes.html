@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAS מתוקן עם קנה מידה מתאים</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ink:#18202a;--muted:#5b6472;--blue:#1f6feb;--red:#e55353;--purple:#7c3aed;--black:#111827}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+.wrap{max-width:1450px;margin:0 auto;padding:24px}
+h1{margin:0 0 8px;font-size:30px}
+.sub{color:var(--muted);line-height:1.6;margin-bottom:18px}
+.layout{display:grid;grid-template-columns:380px 1fr;gap:20px}
+.card{background:var(--card);border:1px solid #e2e6ee;border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(18,38,63,.06)}
+.control{margin:12px 0 16px;padding-bottom:10px;border-bottom:1px solid #edf0f5}
+label{display:flex;justify-content:space-between;align-items:center;font-weight:bold;margin-bottom:8px}
+.value{color:var(--blue);background:#eef4ff;padding:4px 8px;border-radius:999px;min-width:82px;text-align:center}
+input[type=range]{width:100%}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{border:none;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:bold}
+.primary{background:var(--blue);color:#fff}.secondary{background:#eef3fb;color:#1b2a41}
+.formula,.answer,.mini{border-radius:14px;padding:14px}
+.formula{background:#f8fbff;border:1px solid #dce9ff;color:#11325e;line-height:1.9;margin-top:14px}
+.answer{background:#fbfcff;border:1px solid #edf1f8;line-height:1.9;margin-top:14px}
+.grid2,.row{display:grid;grid-template-columns:1fr 1fr;gap:20px}.row{margin-top:20px}
+.mini{background:#fafbfe;border:1px solid #edf0f5}
+.legend{display:flex;gap:18px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:14px;margin:6px 0 12px}
+.sw{display:inline-block;width:18px;height:4px;border-radius:999px;margin-left:6px;vertical-align:middle}
+.base{background:var(--red)} .cur{background:var(--blue)} .demand{background:var(--purple)} .supply{background:var(--black)}
+canvas{width:100%;display:block;background:#fff;border-radius:14px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:14px}
+th,td{padding:8px 6px;border-bottom:1px solid #edf0f5;text-align:center}
+th{background:#fafbfe}
+.note{color:var(--muted);line-height:1.7;font-size:14px}
+code{background:#fff;padding:2px 6px;border-radius:8px;border:1px solid #e8eef8}
+@media (max-width:1000px){.layout,.grid2,.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>אפליקציה דינמית לבניית עקומת SAS</h1>
+<div class="sub">
+הגרסה הזו מתוקנת לקנה המידה של הדוגמה שלך. עם
+<b>Y = 30L<sup>0.5</sup>K<sup>0.5</sup></b> ועם <b>W=1</b>,
+מתקבל בטווח הקצר:
+<b>Y(P)=1800P</b> כאשר <b>K=4</b> ו-<b>A=30</b>. לכן ערכי התוצר גבוהים, והצירים כאן הותאמו לכך.
+</div>
+
+<div class="layout">
+  <div class="card">
+    <h2 style="margin:0 0 12px;font-size:22px">גדלים אקסוגניים</h2>
+
+    <div class="control"><label><span>K – מלאי ההון</span><span class="value" id="kVal"></span></label><input id="k" type="range" min="1" max="20" step="0.5" value="4"></div>
+    <div class="control"><label><span>A – מקדם טכנולוגי (במקום 30)</span><span class="value" id="aVal"></span></label><input id="a" type="range" min="10" max="60" step="1" value="30"></div>
+    <div class="control"><label><span>W – שכר נומינלי קבוע</span><span class="value" id="wVal"></span></label><input id="w" type="range" min="0.5" max="8" step="0.1" value="1"></div>
+    <div class="control"><label><span>P* – רמת מחירים מסומנת</span><span class="value" id="pVal"></span></label><input id="p" type="range" min="0.5" max="20" step="0.1" value="5"></div>
+
+    <div class="btns">
+      <button class="primary" id="resetBtn">איפוס לערכי הדוגמה</button>
+      <button class="secondary" id="toggleBtn">הסתרת/הצגת בסיס</button>
+    </div>
+
+    <div class="formula" id="eqBox"></div>
+    <div class="answer" id="ansBox"></div>
+  </div>
+
+  <div>
+    <div class="grid2">
+      <div class="card">
+        <h2 style="margin:0 0 12px;font-size:22px">שוק העבודה בטווח הקצר</h2>
+        <div class="legend">
+          <span><span class="sw base"></span>בסיס</span>
+          <span><span class="sw demand"></span>ביקוש לעבודה</span>
+          <span><span class="sw cur"></span>נוכחי</span>
+        </div>
+        <canvas id="laborChart" width="720" height="470"></canvas>
+        <div class="note">
+          כאן הגרף מראה את ביקוש העבודה ואת הקו האופקי של השכר הריאלי <code>W/P*</code>.
+          כמות העבודה נקבעת בנקודת החיתוך.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin:0 0 12px;font-size:22px">עקומת SAS במערכת הצירים (Y,P)</h2>
+        <div class="legend">
+          <span><span class="sw base"></span>SAS בסיס</span>
+          <span><span class="sw cur"></span>SAS נוכחית</span>
+        </div>
+        <canvas id="sasChart" width="720" height="470"></canvas>
+        <div class="note">
+          הצירים מקובעים לערכים שמתאימים לדוגמה, כדי שהתזוזה של SAS תיראה נכון גם אחרי שינוי ב-<b>K</b>, <b>A</b> או <b>W</b>.
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card mini">
+        <h3 style="margin-top:0">פתרון אלגברי</h3>
+        <div class="note" id="modelBox"></div>
+      </div>
+      <div class="card mini">
+        <h3 style="margin-top:0">טבלת נקודות על SAS</h3>
+        <table id="tbl">
+          <thead><tr><th>P</th><th>L(P)</th><th>Y(P)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const BASE = {k:4,a:30,w:1,p:5};
+const FIXED = { laborLMax: 40000, laborWMax: 2, sasYMax: 36000, sasPMax: 20 };
+let showBase = true;
+
+const val = id => parseFloat(document.getElementById(id).value);
+const fmt = (x,d=2) => Number(x).toLocaleString('he-IL',{maximumFractionDigits:d,minimumFractionDigits:d});
+const getParams = cur => cur ? {k:val('k'),a:val('a'),w:val('w'),p:val('p')} : {...BASE};
+
+function mpl(L,p){ return 0.5 * p.a * Math.sqrt(p.k) / Math.sqrt(L); }
+function outputY(L,p){ return p.a * Math.sqrt(L) * Math.sqrt(p.k); }
+
+function laborDemandFromRealWage(wr,p){
+  const rootL = 0.5 * p.a * Math.sqrt(p.k) / wr;
+  return Math.pow(rootL, 2);
+}
+function sasY(P,p){
+  const wr = p.w / P;
+  const L = laborDemandFromRealWage(wr,p);
+  return outputY(L,p);
+}
+function sasL(P,p){
+  const wr = p.w / P;
+  return laborDemandFromRealWage(wr,p);
+}
+
+function updateBadges(){
+  kVal.textContent=fmt(val('k'),1);
+  aVal.textContent=fmt(val('a'),0);
+  wVal.textContent=fmt(val('w'),1);
+  pVal.textContent=fmt(val('p'),1);
+}
+
+function drawAxes(ctx,W,H,m,xTicks,yTicks,xScale,yScale,xLabel,yLabel){
+  ctx.strokeStyle="#18202a"; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(m.left,m.top); ctx.lineTo(m.left,H-m.bottom); ctx.lineTo(W-m.right,H-m.bottom);
+  ctx.stroke();
+
+  ctx.strokeStyle="#d9deea"; ctx.lineWidth=1; ctx.font="13px Arial"; ctx.fillStyle="#5b6472";
+  yTicks.forEach(t=>{
+    const y = yScale(t);
+    ctx.beginPath(); ctx.moveTo(m.left,y); ctx.lineTo(W-m.right,y); ctx.stroke();
+    ctx.fillText(fmt(t,1), 18, y+4);
+  });
+  xTicks.forEach(t=>{
+    const x = xScale(t);
+    ctx.beginPath(); ctx.moveTo(x,m.top); ctx.lineTo(x,H-m.bottom); ctx.stroke();
+    ctx.fillText(fmt(t,1), x-16, H-m.bottom+22);
+  });
+
+  ctx.font="bold 16px Arial"; ctx.fillStyle="#18202a";
+  ctx.fillText(yLabel, 22, m.top+6);
+  ctx.fillText(xLabel, W-m.right-6, H-m.bottom+38);
+}
+
+function drawLabor(){
+  const c = laborChart, ctx = c.getContext('2d');
+  const W = c.width, H = c.height, m = {top:18,right:24,bottom:52,left:72};
+  ctx.clearRect(0,0,W,H);
+
+  const cur = getParams(true), base = getParams(false);
+  const wrCur = cur.w / cur.p;
+  const wrBase = base.w / base.p;
+  const Lcur = sasL(cur.p, cur);
+
+  const Lmax = FIXED.laborLMax;
+  const wMax = FIXED.laborWMax;
+
+  const xScale = L => m.left + (L/Lmax)*(W-m.left-m.right);
+  const yScale = w => m.top + (H-m.top-m.bottom) - (w/wMax)*(H-m.top-m.bottom);
+
+  drawAxes(ctx,W,H,m,[0,8000,16000,24000,32000,40000],[0,0.4,0.8,1.2,1.6,2.0],xScale,yScale,"L","W/P");
+
+  function drawDemand(p,color,width){
+    ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath();
+    let first=true;
+    for(let L=1; L<=Lmax; L+=25){
+      const w = mpl(L,p);
+      const x=xScale(L), y=yScale(w);
+      if(first){ctx.moveTo(x,y); first=false;} else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  if(showBase){
+    drawDemand(base, "#e55353", 3);
+    const yb = yScale(wrBase);
+    ctx.strokeStyle="#b91c1c"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(m.left,yb); ctx.lineTo(W-m.right,yb); ctx.stroke();
+  }
+
+  drawDemand(cur, "#7c3aed", 4);
+  const yc = yScale(wrCur);
+  ctx.strokeStyle="#111827"; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(m.left,yc); ctx.lineTo(W-m.right,yc); ctx.stroke();
+
+  const x = xScale(Math.min(Lcur,Lmax)), y = yc;
+  ctx.fillStyle="#1f6feb"; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+
+  ctx.setLineDash([5,5]); ctx.strokeStyle="#7aa7f8";
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,H-m.bottom); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m.left,y); ctx.lineTo(x,y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle="#18202a"; ctx.font="bold 14px Arial";
+  ctx.fillText("L="+fmt(Lcur,2), Math.min(x+10,W-150), H-m.bottom-10);
+  ctx.fillText("W/P="+fmt(wrCur,2), m.left+8, Math.max(y-8,28));
+}
+
+function drawSAS(){
+  const c = sasChart, ctx = c.getContext('2d');
+  const W = c.width, H = c.height, m = {top:18,right:24,bottom:52,left:72};
+  ctx.clearRect(0,0,W,H);
+
+  const cur = getParams(true), base = getParams(false);
+
+  const Ymax = FIXED.sasYMax;
+  const Pmax = FIXED.sasPMax;
+  const xScale = Y => m.left + (Y/Ymax)*(W-m.left-m.right);
+  const yScale = P => m.top + (H-m.top-m.bottom) - (P/Pmax)*(H-m.top-m.bottom);
+
+  drawAxes(ctx,W,H,m,[0,7200,14400,21600,28800,36000],[0,4,8,12,16,20],xScale,yScale,"Y","P");
+
+  function drawCurve(p,color,width){
+    ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath();
+    let first=true;
+    for(let P=0.5; P<=Pmax; P+=0.05){
+      const Y = sasY(P,p);
+      const x=xScale(Math.min(Y,Ymax)), y=yScale(P);
+      if(first){ctx.moveTo(x,y); first=false;} else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  if(showBase) drawCurve(base, "#e55353", 3);
+  drawCurve(cur, "#1f6feb", 4);
+
+  const yp = cur.p;
+  const yStar = sasY(yp, cur);
+  const xc = xScale(Math.min(yStar,Ymax)), yc = yScale(yp);
+
+  ctx.fillStyle="#1f6feb"; ctx.beginPath(); ctx.arc(xc,yc,5,0,Math.PI*2); ctx.fill();
+  ctx.setLineDash([5,5]); ctx.strokeStyle="#7aa7f8";
+  ctx.beginPath(); ctx.moveTo(xc,yc); ctx.lineTo(xc,H-m.bottom); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m.left,yc); ctx.lineTo(xc,yc); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle="#18202a"; ctx.font="bold 14px Arial";
+  ctx.fillText("Y="+fmt(yStar,2), Math.min(xc+10,W-140), m.top+22);
+}
+
+function refreshText(){
+  const cur = getParams(true);
+  const base = getParams(false);
+  const wr = cur.w / cur.p;
+  const L = sasL(cur.p, cur);
+  const Y = sasY(cur.p, cur);
+
+  eqBox.innerHTML =
+    "<b>נתוני הדוגמה:</b><br>" +
+    "<code>Y = 30L<sup>0.5</sup>K<sup>0.5</sup></code><br>" +
+    "<code>W = 1</code> (בבסיס)<br>" +
+    "<div class='note' style='margin-top:8px'>כאן השתמשתי ב־<code>A</code> כמקדם כללי במקום 30, כך שבבסיס <code>A=30</code>.</div>";
+
+  let dir = "SAS כמעט לא השתנתה.";
+  const baseYAtSameP = sasY(cur.p, base);
+  if(Y > baseYAtSameP + 0.05) dir = "באותה רמת מחירים, התוצר גבוה יותר – SAS זזה ימינה.";
+  else if(Y < baseYAtSameP - 0.05) dir = "באותה רמת מחירים, התוצר נמוך יותר – SAS זזה שמאלה.";
+
+  ansBox.innerHTML =
+    "<b>עבור P* הנוכחית:</b><br>" +
+    "<code>W/P = " + fmt(wr,3) + "</code><br>" +
+    "<code>L(P*) = " + fmt(L,3) + "</code><br>" +
+    "<code>Y(P*) = " + fmt(Y,3) + "</code><br><br>" +
+    "<b>פירוש:</b> " + dir;
+
+  modelBox.innerHTML =
+    "בטווח הקצר השכר הנומינלי קבוע, לכן עבור כל <code>P</code> נקבע <code>W/P</code>.<br>" +
+    "מתנאי הביקוש לעבודה:<br>" +
+    "<code>W/P = 0.5A√K / √L</code><br>" +
+    "ומכאן:<br>" +
+    "<code>√L = 0.5A√K / (W/P)</code><br>" +
+    "<code>L(P) = [0.5A√K·P/W]^2</code><br>" +
+    "ואז:<br>" +
+    "<code>Y(P) = A√K√L(P)</code><br><br>" +
+    "לערכי הבסיס: <code>K=4</code>, <code>A=30</code>, <code>W=1</code> מתקבל<br>" +
+    "<code>Y(P)=1800P</code>.";
+
+  const tbody = document.querySelector("#tbl tbody");
+  tbody.innerHTML = "";
+  [1,2,3,4,5,7.5,10,15,20].forEach(P=>{
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>"+fmt(P,1)+"</td><td>"+fmt(sasL(P,cur),3)+"</td><td>"+fmt(sasY(P,cur),3)+"</td>";
+    tbody.appendChild(tr);
+  });
+}
+
+function updateAll(){
+  updateBadges();
+  refreshText();
+  drawLabor();
+  drawSAS();
+}
+
+["k","a","w","p"].forEach(id=>document.getElementById(id).addEventListener("input",updateAll));
+resetBtn.addEventListener("click", ()=>{
+  k.value=BASE.k;
+  a.value=BASE.a;
+  w.value=BASE.w;
+  p.value=BASE.p;
+  updateAll();
+});
+toggleBtn.addEventListener("click", ()=>{
+  showBase=!showBase;
+  drawLabor();
+  drawSAS();
+});
+
+updateAll();
+</script>
+</body>
+</html>
